@@ -1,20 +1,32 @@
 import streamlit as st
 from openpyxl import load_workbook
+from openpyxl.utils import column_index_from_string
 import datetime
 import subprocess
 
 TEMPLATE_FILE = "Tampalatepr.xlsx"
 
-# Helper aman untuk tulis di cell merge
+# === helper tulis aman ke cell merge ===
 def safe_write(ws, cell, value):
+    """
+    Tulis ke Excel aman meski cell ada di dalam merge.
+    Jika cell termasuk merge range, otomatis tulis ke sel kiri-atas.
+    """
+    col_str = ''.join(filter(str.isalpha, cell))
+    row_str = ''.join(filter(str.isdigit, cell))
+    col = column_index_from_string(col_str)
+    row = int(row_str)
+
     for rng in ws.merged_cells.ranges:
-        if cell in rng:
-            # ambil sel kiri-atas dari merge range
+        if (row, col) in rng.cells:
+            # ambil sel kiri-atas merge
             rmin, cmin, _, _ = rng.bounds
             cell = ws.cell(row=rmin, column=cmin).coordinate
             break
+
     ws[cell].value = value
 
+# === Streamlit App ===
 st.title("Form Purchasing Request (PR)")
 
 with st.form("pr_form"):
@@ -61,16 +73,14 @@ if tambah_barang:
     )
     st.rerun()
 
-# =====================
-# Isi Excel + Export ke PDF (opsional)
-# =====================
+# === Isi Excel + Export ke PDF (opsional) ===
 if submitted:
     wb = load_workbook(TEMPLATE_FILE)
     ws = wb.active
 
-    # --- isi header (pakai safe_write) ---
+    # --- isi header ---
     safe_write(ws, "B3", f"Departemen: {departemen}")
-    safe_write(ws, "B3", f"Tanggal: {tanggal}")         # digabung ke B3 (merge)
+    safe_write(ws, "B3", f"Tanggal: {tanggal}")
     safe_write(ws, "B3", f"Jenis Pekerjaan: {jenis_pekerjaan}")
     safe_write(ws, "B3", f"No. PP: {no_pp}")
 
