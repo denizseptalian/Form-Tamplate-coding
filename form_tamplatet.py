@@ -1,6 +1,6 @@
 import streamlit as st
 from openpyxl import load_workbook
-from openpyxl.utils import column_index_from_string, get_column_letter
+from openpyxl.utils import column_index_from_string
 import datetime
 import subprocess
 
@@ -9,22 +9,22 @@ TEMPLATE_FILE = "Tampalatepr.xlsx"
 # === helper tulis aman ke cell merge ===
 def safe_write(ws, cell, value):
     """
-    Tulis ke Excel aman meski cell ada di dalam merge.
-    Jika cell termasuk merge range, otomatis tulis ke sel kiri-atas.
+    Isi cell Excel dengan aman meski ada merge.
+    Selalu tulis ke cell kiri-atas merge menggunakan ws.cell(row, col).
     """
+    # pecah referensi cell
     col_str = ''.join(filter(str.isalpha, cell))
     row_str = ''.join(filter(str.isdigit, cell))
     col = column_index_from_string(col_str)
     row = int(row_str)
 
+    # cek apakah cell ada di merge
     for rng in ws.merged_cells.ranges:
         if (row, col) in rng.cells:
-            # langsung ambil sel kiri-atas dari merge
-            rmin, cmin, _, _ = rng.bounds
-            cell = f"{get_column_letter(cmin)}{rmin}"
+            row, col = rng.min_row, rng.min_col
             break
 
-    ws[cell].value = value
+    ws.cell(row=row, column=col, value=value)
 
 # === Streamlit App ===
 st.title("📑 Form Purchasing Request (PR)")
@@ -68,58 +68,4 @@ with st.form("pr_form"):
     submitted = st.form_submit_button("💾 Simpan & Cetak")
 
 if tambah_barang:
-    st.session_state.barang.append(
-        {"kode": "", "nama": "", "spesifikasi": "", "satuan": "", "qty": 1, "harga": 0, "keterangan": ""}
-    )
-    st.rerun()
-
-# === Isi Excel + Export ke PDF (opsional) ===
-if submitted:
-    wb = load_workbook(TEMPLATE_FILE)
-    ws = wb.active
-
-    # --- isi header ---
-    safe_write(ws, "B3", f"Departemen: {departemen}")
-    safe_write(ws, "B3", f"Tanggal: {tanggal}")
-    safe_write(ws, "B3", f"Jenis Pekerjaan: {jenis_pekerjaan}")
-    safe_write(ws, "B3", f"No. PP: {no_pp}")
-
-    # --- isi detail barang (mulai baris 11) ---
-    row_start = 11
-    for i, item in enumerate(st.session_state.barang):
-        r = row_start + i
-        safe_write(ws, f"B{r}", item["kode"])
-        safe_write(ws, f"C{r}", item["nama"])
-        safe_write(ws, f"D{r}", item["spesifikasi"])
-        safe_write(ws, f"E{r}", item["satuan"])
-        safe_write(ws, f"F{r}", item["qty"])
-        safe_write(ws, f"G{r}", item["harga"])
-        safe_write(ws, f"H{r}", item["qty"] * item["harga"])
-        safe_write(ws, f"I{r}", item["keterangan"])
-
-    # --- isi anggaran (contoh baris 25–27) ---
-    safe_write(ws, "B25", f"Total Anggaran: Rp {total_anggaran:,}")
-    safe_write(ws, "B27", f"Actual: Rp {actual_pengeluaran:,} | Permintaan: Rp {permintaan_saat_ini:,} | Saldo: Rp {saldo_anggaran:,}")
-
-    # --- persetujuan ---
-    safe_write(ws, "B31", diajukan_ktu)  # atas tanda tangan KTU
-    safe_write(ws, "F31", diajukan_mgr)  # atas tanda tangan Estate Manager
-
-    # simpan Excel
-    output_xlsx = "PR_Output.xlsx"
-    wb.save(output_xlsx)
-
-    # --- convert Excel ke PDF jika ada LibreOffice ---
-    output_pdf = "PR_Output.pdf"
-    try:
-        subprocess.run(
-            ["libreoffice", "--headless", "--convert-to", "pdf", output_xlsx, "--outdir", "."],
-            check=True
-        )
-        with open(output_pdf, "rb") as f:
-            st.success("✅ PR berhasil dibuat dalam format PDF")
-            st.download_button("⬇️ Download PR PDF", f, file_name=output_pdf)
-    except Exception:
-        st.warning("📂 PR berhasil dibuat dalam format Excel. (PDF otomatis butuh LibreOffice/Excel).")
-        with open(output_xlsx, "rb") as f:
-            st.download_button("⬇️ Download PR Excel", f, file_name=output_xlsx)
+    st.session_state.barang.ap_
