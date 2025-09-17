@@ -1,6 +1,6 @@
 import streamlit as st
 from openpyxl import load_workbook
-from openpyxl.utils import column_index_from_string
+from openpyxl.utils import column_index_from_string, get_column_letter
 import datetime
 import subprocess
 
@@ -19,15 +19,15 @@ def safe_write(ws, cell, value):
 
     for rng in ws.merged_cells.ranges:
         if (row, col) in rng.cells:
-            # ambil sel kiri-atas merge
+            # langsung ambil sel kiri-atas dari merge
             rmin, cmin, _, _ = rng.bounds
-            cell = ws.cell(row=rmin, column=cmin).coordinate
+            cell = f"{get_column_letter(cmin)}{rmin}"
             break
 
     ws[cell].value = value
 
 # === Streamlit App ===
-st.title("Form Purchasing Request (PR)")
+st.title("📑 Form Purchasing Request (PR)")
 
 with st.form("pr_form"):
     st.header("📋 Header PR")
