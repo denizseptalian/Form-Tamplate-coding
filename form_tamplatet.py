@@ -40,8 +40,8 @@ with st.form("pr_form"):
     saldo_anggaran = st.number_input("Saldo Anggaran (Rp)", min_value=0, value=0)
 
     st.header("👨‍💼 Persetujuan")
-    diajukan_oleh = st.text_input("Diajukan Oleh")
-    # diperiksa_oleh & disetujui_oleh mengikuti template Excel
+    diajukan_ktu = st.text_input("Diajukan Oleh (KTU)")
+    diajukan_mgr = st.text_input("Diajukan Oleh (Estate Manager)")
 
     submitted = st.form_submit_button("💾 Simpan & Cetak")
 
@@ -59,10 +59,10 @@ if submitted:
     ws = wb.active
 
     # --- isi header ---
-    ws["B2"] = departemen
-    ws["E2"] = str(tanggal)
-    ws["B3"] = jenis_pekerjaan
-    ws["E3"] = no_pp
+    ws["B2"] = departemen           # sesuaikan dengan template
+    ws["B3"] = str(tanggal)         # ditulis di cell merge kiri-atas
+    ws["B4"] = jenis_pekerjaan
+    ws["B5"] = no_pp
 
     # --- isi detail barang (mulai baris 10 misalnya) ---
     row_start = 10
@@ -84,8 +84,8 @@ if submitted:
     ws["F33"] = saldo_anggaran
 
     # --- persetujuan ---
-    ws["B35"] = diajukan_oleh
-    # diperiksa & disetujui tetap sesuai template
+    ws["B35"] = diajukan_ktu        # atas tanda tangan KTU
+    ws["F35"] = diajukan_mgr        # atas tanda tangan Estate Manager
 
     # simpan Excel
     output_xlsx = "PR_Output.xlsx"
