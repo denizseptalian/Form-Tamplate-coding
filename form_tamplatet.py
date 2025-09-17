@@ -3,9 +3,15 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from io import BytesIO
 import datetime
+from pypdf import PdfReader, PdfWriter  # gunakan pypdf (pengganti PyPDF2)
+
+TEMPLATE_FILE = "TamplatePR.pdf.pdf"  # file template PR resmi
 
 st.title("Form Purchasing Request (PR)")
 
+# =====================
+# Form Input
+# =====================
 with st.form("pr_form"):
     st.header("📋 Header PR")
     departemen = st.text_input("Departemen")
@@ -38,9 +44,6 @@ with st.form("pr_form"):
     permintaan_saat_ini = st.number_input("Permintaan Saat Ini (Rp)", min_value=0, value=0)
     saldo_anggaran = st.number_input("Saldo Anggaran (Rp)", min_value=0, value=0)
 
-    st.header("📝 Keterangan Tambahan")
-    keterangan_umum = st.text_area("Keterangan / Tujuan PR")
-
     st.header("👨‍💼 Persetujuan")
     diajukan_oleh = st.text_input("Diajukan Oleh")
     diperiksa_oleh = st.text_input("Diperiksa Oleh")
@@ -55,53 +58,61 @@ if tambah_barang:
     st.rerun()
 
 # =====================
-# Generate PDF
+# Cetak ke Template PDF
 # =====================
 if submitted:
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    c.setFont("Helvetica", 10)
+    packet = BytesIO()
+    can = canvas.Canvas(packet, pagesize=A4)
+    can.setFont("Helvetica", 9)
 
-    # Header
-    c.drawString(100, 800, f"Departemen: {departemen}")
-    c.drawString(100, 785, f"Tanggal Pengajuan: {tanggal}")
-    c.drawString(100, 770, f"Jenis Pekerjaan/Unit/Stasiun: {jenis_pekerjaan}")
-    c.drawString(100, 755, f"No. PP: {no_pp}")
+    # --- header (koordinat perlu disesuaikan manual sesuai kotak di template) ---
+    can.drawString(150, 760, departemen)
+    can.drawString(150, 745, str(tanggal))
+    can.drawString(150, 730, jenis_pekerjaan)
+    can.drawString(150, 715, no_pp)
 
-    # Detail Barang
-    y = 730
-    c.drawString(100, y, "Detail Barang:")
-    y -= 15
-    for item in st.session_state.barang:
+    # --- detail barang (posisi tabel) ---
+    start_y = 670
+    row_height = 15
+    for i, item in enumerate(st.session_state.barang):
+        y = start_y - i * row_height
         total = item["qty"] * item["harga"]
-        c.drawString(110, y, f"{item['kode']} | {item['nama']} | {item['spesifikasi']} | "
-                             f"{item['satuan']} | {item['qty']} | Rp{item['harga']:,} | Rp{total:,} | {item['keterangan']}")
-        y -= 15
+        can.drawString(50, y, item["kode"])
+        can.drawString(100, y, item["nama"])
+        can.drawString(200, y, item["spesifikasi"])
+        can.drawString(350, y, item["satuan"])
+        can.drawString(380, y, str(item["qty"]))
+        can.drawString(420, y, f"Rp {item['harga']:,}")
+        can.drawString(500, y, f"Rp {total:,}")
+        can.drawString(560, y, item["keterangan"])
 
-    # Anggaran
-    y -= 20
-    c.drawString(100, y, f"Total Anggaran: Rp{total_anggaran:,}")
-    y -= 15
-    c.drawString(100, y, f"Actual Pengeluaran: Rp{actual_pengeluaran:,}")
-    y -= 15
-    c.drawString(100, y, f"Permintaan Saat Ini: Rp{permintaan_saat_ini:,}")
-    y -= 15
-    c.drawString(100, y, f"Saldo Anggaran: Rp{saldo_anggaran:,}")
+    # --- anggaran ---
+    can.drawString(400, 200, f"Rp {total_anggaran:,}")
+    can.drawString(400, 185, f"Rp {actual_pengeluaran:,}")
+    can.drawString(400, 170, f"Rp {permintaan_saat_ini:,}")
+    can.drawString(400, 155, f"Rp {saldo_anggaran:,}")
 
-    # Keterangan
-    y -= 25
-    c.drawString(100, y, f"Keterangan: {keterangan_umum}")
+    # --- persetujuan ---
+    can.drawString(150, 120, diajukan_oleh)
+    can.drawString(300, 120, diperiksa_oleh)
+    can.drawString(450, 120, disetujui_oleh)
 
-    # Persetujuan
-    y -= 40
-    c.drawString(100, y, f"Diajukan Oleh: {diajukan_oleh}")
-    y -= 15
-    c.drawString(100, y, f"Diperiksa Oleh: {diperiksa_oleh}")
-    y -= 15
-    c.drawString(100, y, f"Disetujui Oleh: {disetujui_oleh}")
+    can.save()
+    packet.seek(0)
 
-    c.showPage()
-    c.save()
+    # Gabungkan overlay dengan template
+    overlay_pdf = PdfReader(packet)
+    template_pdf = PdfReader(open(TEMPLATE_FILE, "rb"))
+    writer = PdfWriter()
 
-    buffer.seek(0)
-    st.download_button("⬇️ Download PR PDF", data=buffer, file_name="PR_Output.pdf", mime="application/pdf")
+    template_page = template_pdf.pages[0]
+    template_page.merge_page(overlay_pdf.pages[0])
+    writer.add_page(template_page)
+
+    output_filename = "PR_Output.pdf"
+    with open(output_filename, "wb") as f_out:
+        writer.write(f_out)
+
+    with open(output_filename, "rb") as f:
+        st.success("✅ PR berhasil dibuat sesuai template resmi!")
+        st.download_button("⬇️ Download PR PDF", f, file_name=output_filename)
