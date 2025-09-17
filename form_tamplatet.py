@@ -5,6 +5,16 @@ import subprocess
 
 TEMPLATE_FILE = "Tampalatepr.xlsx"
 
+# Helper aman untuk tulis di cell merge
+def safe_write(ws, cell, value):
+    for rng in ws.merged_cells.ranges:
+        if cell in rng:
+            # ambil sel kiri-atas dari merge range
+            rmin, cmin, _, _ = rng.bounds
+            cell = ws.cell(row=rmin, column=cmin).coordinate
+            break
+    ws[cell].value = value
+
 st.title("Form Purchasing Request (PR)")
 
 with st.form("pr_form"):
@@ -58,34 +68,32 @@ if submitted:
     wb = load_workbook(TEMPLATE_FILE)
     ws = wb.active
 
-    # --- isi header ---
-    ws["B2"] = departemen           # sesuaikan dengan template
-    ws["B3"] = str(tanggal)         # ditulis di cell merge kiri-atas
-    ws["B4"] = jenis_pekerjaan
-    ws["B5"] = no_pp
+    # --- isi header (pakai safe_write) ---
+    safe_write(ws, "B3", f"Departemen: {departemen}")
+    safe_write(ws, "B3", f"Tanggal: {tanggal}")         # digabung ke B3 (merge)
+    safe_write(ws, "B3", f"Jenis Pekerjaan: {jenis_pekerjaan}")
+    safe_write(ws, "B3", f"No. PP: {no_pp}")
 
-    # --- isi detail barang (mulai baris 10 misalnya) ---
-    row_start = 10
+    # --- isi detail barang (mulai baris 11) ---
+    row_start = 11
     for i, item in enumerate(st.session_state.barang):
         r = row_start + i
-        ws[f"A{r}"] = item["kode"]
-        ws[f"B{r}"] = item["nama"]
-        ws[f"C{r}"] = item["spesifikasi"]
-        ws[f"D{r}"] = item["satuan"]
-        ws[f"E{r}"] = item["qty"]
-        ws[f"F{r}"] = item["harga"]
-        ws[f"G{r}"] = item["qty"] * item["harga"]
-        ws[f"H{r}"] = item["keterangan"]
+        safe_write(ws, f"B{r}", item["kode"])
+        safe_write(ws, f"C{r}", item["nama"])
+        safe_write(ws, f"D{r}", item["spesifikasi"])
+        safe_write(ws, f"E{r}", item["satuan"])
+        safe_write(ws, f"F{r}", item["qty"])
+        safe_write(ws, f"G{r}", item["harga"])
+        safe_write(ws, f"H{r}", item["qty"] * item["harga"])
+        safe_write(ws, f"I{r}", item["keterangan"])
 
-    # --- isi anggaran ---
-    ws["F30"] = total_anggaran
-    ws["F31"] = actual_pengeluaran
-    ws["F32"] = permintaan_saat_ini
-    ws["F33"] = saldo_anggaran
+    # --- isi anggaran (contoh baris 25–27) ---
+    safe_write(ws, "B25", f"Total Anggaran: Rp {total_anggaran:,}")
+    safe_write(ws, "B27", f"Actual: Rp {actual_pengeluaran:,} | Permintaan: Rp {permintaan_saat_ini:,} | Saldo: Rp {saldo_anggaran:,}")
 
     # --- persetujuan ---
-    ws["B35"] = diajukan_ktu        # atas tanda tangan KTU
-    ws["F35"] = diajukan_mgr        # atas tanda tangan Estate Manager
+    safe_write(ws, "B31", diajukan_ktu)  # atas tanda tangan KTU
+    safe_write(ws, "F31", diajukan_mgr)  # atas tanda tangan Estate Manager
 
     # simpan Excel
     output_xlsx = "PR_Output.xlsx"
