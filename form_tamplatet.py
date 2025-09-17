@@ -3,15 +3,55 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from io import BytesIO
 import datetime
-from pypdf import PdfReader, PdfWriter  # gunakan pypdf (pengganti PyPDF2)
 
-TEMPLATE_FILE = "TamplatePR.pdf.pdf"  # file template PR resmi
+# coba impor pypdf dulu, fallback ke PyPDF2
+try:
+    from pypdf import PdfReader, PdfWriter
+except ImportError:
+    from PyPDF2 import PdfReader, PdfWriter
 
+TEMPLATE_FILE = "TamplatePR.pdf.pdf"  # template PR resmi
+
+# =====================
+# Koordinat Requirement Text
+# =====================
+coords = {
+    "header": {
+        "departemen": (150, 770),
+        "tanggal": (400, 770),
+        "jenis_pekerjaan": (150, 755),
+        "no_pp": (400, 755),
+    },
+    "barang": {
+        "kode": 40,
+        "nama": 100,
+        "spesifikasi": 200,
+        "satuan": 350,
+        "qty": 390,
+        "harga": 430,
+        "total": 500,
+        "keterangan": 560,
+        "start_y": 700,
+        "row_height": 15,
+    },
+    "anggaran": {
+        "total": (400, 200),
+        "actual": (400, 185),
+        "permintaan": (400, 170),
+        "saldo": (400, 155),
+    },
+    "persetujuan": {
+        "diajukan": (120, 120),
+        "diperiksa": (300, 120),
+        "disetujui": (480, 120),
+    }
+}
+
+# =====================
+# Streamlit Form
+# =====================
 st.title("Form Purchasing Request (PR)")
 
-# =====================
-# Form Input
-# =====================
 with st.form("pr_form"):
     st.header("📋 Header PR")
     departemen = st.text_input("Departemen")
@@ -58,49 +98,49 @@ if tambah_barang:
     st.rerun()
 
 # =====================
-# Cetak ke Template PDF
+# Generate PDF
 # =====================
 if submitted:
     packet = BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
     can.setFont("Helvetica", 9)
 
-    # --- header (koordinat perlu disesuaikan manual sesuai kotak di template) ---
-    can.drawString(150, 760, departemen)
-    can.drawString(150, 745, str(tanggal))
-    can.drawString(150, 730, jenis_pekerjaan)
-    can.drawString(150, 715, no_pp)
+    # --- header ---
+    can.drawString(*coords["header"]["departemen"], departemen)
+    can.drawString(*coords["header"]["tanggal"], str(tanggal))
+    can.drawString(*coords["header"]["jenis_pekerjaan"], jenis_pekerjaan)
+    can.drawString(*coords["header"]["no_pp"], no_pp)
 
-    # --- detail barang (posisi tabel) ---
-    start_y = 670
-    row_height = 15
+    # --- detail barang ---
+    start_y = coords["barang"]["start_y"]
+    row_h = coords["barang"]["row_height"]
     for i, item in enumerate(st.session_state.barang):
-        y = start_y - i * row_height
+        y = start_y - i * row_h
         total = item["qty"] * item["harga"]
-        can.drawString(50, y, item["kode"])
-        can.drawString(100, y, item["nama"])
-        can.drawString(200, y, item["spesifikasi"])
-        can.drawString(350, y, item["satuan"])
-        can.drawString(380, y, str(item["qty"]))
-        can.drawString(420, y, f"Rp {item['harga']:,}")
-        can.drawString(500, y, f"Rp {total:,}")
-        can.drawString(560, y, item["keterangan"])
+        can.drawString(coords["barang"]["kode"], y, item["kode"])
+        can.drawString(coords["barang"]["nama"], y, item["nama"])
+        can.drawString(coords["barang"]["spesifikasi"], y, item["spesifikasi"])
+        can.drawString(coords["barang"]["satuan"], y, item["satuan"])
+        can.drawString(coords["barang"]["qty"], y, str(item["qty"]))
+        can.drawString(coords["barang"]["harga"], y, f"Rp {item['harga']:,}")
+        can.drawString(coords["barang"]["total"], y, f"Rp {total:,}")
+        can.drawString(coords["barang"]["keterangan"], y, item["keterangan"])
 
     # --- anggaran ---
-    can.drawString(400, 200, f"Rp {total_anggaran:,}")
-    can.drawString(400, 185, f"Rp {actual_pengeluaran:,}")
-    can.drawString(400, 170, f"Rp {permintaan_saat_ini:,}")
-    can.drawString(400, 155, f"Rp {saldo_anggaran:,}")
+    can.drawString(*coords["anggaran"]["total"], f"Rp {total_anggaran:,}")
+    can.drawString(*coords["anggaran"]["actual"], f"Rp {actual_pengeluaran:,}")
+    can.drawString(*coords["anggaran"]["permintaan"], f"Rp {permintaan_saat_ini:,}")
+    can.drawString(*coords["anggaran"]["saldo"], f"Rp {saldo_anggaran:,}")
 
     # --- persetujuan ---
-    can.drawString(150, 120, diajukan_oleh)
-    can.drawString(300, 120, diperiksa_oleh)
-    can.drawString(450, 120, disetujui_oleh)
+    can.drawString(*coords["persetujuan"]["diajukan"], diajukan_oleh)
+    can.drawString(*coords["persetujuan"]["diperiksa"], diperiksa_oleh)
+    can.drawString(*coords["persetujuan"]["disetujui"], disetujui_oleh)
 
     can.save()
     packet.seek(0)
 
-    # Gabungkan overlay dengan template
+    # gabung overlay dengan template
     overlay_pdf = PdfReader(packet)
     template_pdf = PdfReader(open(TEMPLATE_FILE, "rb"))
     writer = PdfWriter()
@@ -114,5 +154,5 @@ if submitted:
         writer.write(f_out)
 
     with open(output_filename, "rb") as f:
-        st.success("✅ PR berhasil dibuat sesuai template resmi!")
+        st.success("✅ PR berhasil dibuat sesuai template!")
         st.download_button("⬇️ Download PR PDF", f, file_name=output_filename)
