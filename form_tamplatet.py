@@ -1,55 +1,10 @@
 import streamlit as st
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from io import BytesIO
+from openpyxl import load_workbook
 import datetime
+import subprocess
 
-# coba impor pypdf dulu, fallback ke PyPDF2
-try:
-    from pypdf import PdfReader, PdfWriter
-except ImportError:
-    from PyPDF2 import PdfReader, PdfWriter
+TEMPLATE_FILE = "Tampalatepr.xlsx"
 
-TEMPLATE_FILE = "TamplatePR.pdf.pdf"  # template PR resmi
-
-# =====================
-# Koordinat Requirement Text
-# =====================
-coords = {
-    "header": {
-        "departemen": (150, 770),
-        "tanggal": (400, 770),
-        "jenis_pekerjaan": (150, 755),
-        "no_pp": (400, 755),
-    },
-    "barang": {
-        "kode": 40,
-        "nama": 100,
-        "spesifikasi": 200,
-        "satuan": 350,
-        "qty": 390,
-        "harga": 430,
-        "total": 500,
-        "keterangan": 560,
-        "start_y": 700,
-        "row_height": 15,
-    },
-    "anggaran": {
-        "total": (400, 200),
-        "actual": (400, 185),
-        "permintaan": (400, 170),
-        "saldo": (400, 155),
-    },
-    "persetujuan": {
-        "diajukan": (120, 120),
-        "diperiksa": (300, 120),
-        "disetujui": (480, 120),
-    }
-}
-
-# =====================
-# Streamlit Form
-# =====================
 st.title("Form Purchasing Request (PR)")
 
 with st.form("pr_form"):
@@ -86,8 +41,7 @@ with st.form("pr_form"):
 
     st.header("👨‍💼 Persetujuan")
     diajukan_oleh = st.text_input("Diajukan Oleh")
-    diperiksa_oleh = st.text_input("Diperiksa Oleh")
-    disetujui_oleh = st.text_input("Disetujui Oleh")
+    # diperiksa_oleh & disetujui_oleh mengikuti template Excel
 
     submitted = st.form_submit_button("💾 Simpan & Cetak")
 
@@ -98,61 +52,56 @@ if tambah_barang:
     st.rerun()
 
 # =====================
-# Generate PDF
+# Isi Excel + Export ke PDF (opsional)
 # =====================
 if submitted:
-    packet = BytesIO()
-    can = canvas.Canvas(packet, pagesize=A4)
-    can.setFont("Helvetica", 9)
+    wb = load_workbook(TEMPLATE_FILE)
+    ws = wb.active
 
-    # --- header ---
-    can.drawString(*coords["header"]["departemen"], departemen)
-    can.drawString(*coords["header"]["tanggal"], str(tanggal))
-    can.drawString(*coords["header"]["jenis_pekerjaan"], jenis_pekerjaan)
-    can.drawString(*coords["header"]["no_pp"], no_pp)
+    # --- isi header ---
+    ws["B2"] = departemen
+    ws["E2"] = str(tanggal)
+    ws["B3"] = jenis_pekerjaan
+    ws["E3"] = no_pp
 
-    # --- detail barang ---
-    start_y = coords["barang"]["start_y"]
-    row_h = coords["barang"]["row_height"]
+    # --- isi detail barang (mulai baris 10 misalnya) ---
+    row_start = 10
     for i, item in enumerate(st.session_state.barang):
-        y = start_y - i * row_h
-        total = item["qty"] * item["harga"]
-        can.drawString(coords["barang"]["kode"], y, item["kode"])
-        can.drawString(coords["barang"]["nama"], y, item["nama"])
-        can.drawString(coords["barang"]["spesifikasi"], y, item["spesifikasi"])
-        can.drawString(coords["barang"]["satuan"], y, item["satuan"])
-        can.drawString(coords["barang"]["qty"], y, str(item["qty"]))
-        can.drawString(coords["barang"]["harga"], y, f"Rp {item['harga']:,}")
-        can.drawString(coords["barang"]["total"], y, f"Rp {total:,}")
-        can.drawString(coords["barang"]["keterangan"], y, item["keterangan"])
+        r = row_start + i
+        ws[f"A{r}"] = item["kode"]
+        ws[f"B{r}"] = item["nama"]
+        ws[f"C{r}"] = item["spesifikasi"]
+        ws[f"D{r}"] = item["satuan"]
+        ws[f"E{r}"] = item["qty"]
+        ws[f"F{r}"] = item["harga"]
+        ws[f"G{r}"] = item["qty"] * item["harga"]
+        ws[f"H{r}"] = item["keterangan"]
 
-    # --- anggaran ---
-    can.drawString(*coords["anggaran"]["total"], f"Rp {total_anggaran:,}")
-    can.drawString(*coords["anggaran"]["actual"], f"Rp {actual_pengeluaran:,}")
-    can.drawString(*coords["anggaran"]["permintaan"], f"Rp {permintaan_saat_ini:,}")
-    can.drawString(*coords["anggaran"]["saldo"], f"Rp {saldo_anggaran:,}")
+    # --- isi anggaran ---
+    ws["F30"] = total_anggaran
+    ws["F31"] = actual_pengeluaran
+    ws["F32"] = permintaan_saat_ini
+    ws["F33"] = saldo_anggaran
 
     # --- persetujuan ---
-    can.drawString(*coords["persetujuan"]["diajukan"], diajukan_oleh)
-    can.drawString(*coords["persetujuan"]["diperiksa"], diperiksa_oleh)
-    can.drawString(*coords["persetujuan"]["disetujui"], disetujui_oleh)
+    ws["B35"] = diajukan_oleh
+    # diperiksa & disetujui tetap sesuai template
 
-    can.save()
-    packet.seek(0)
+    # simpan Excel
+    output_xlsx = "PR_Output.xlsx"
+    wb.save(output_xlsx)
 
-    # gabung overlay dengan template
-    overlay_pdf = PdfReader(packet)
-    template_pdf = PdfReader(open(TEMPLATE_FILE, "rb"))
-    writer = PdfWriter()
-
-    template_page = template_pdf.pages[0]
-    template_page.merge_page(overlay_pdf.pages[0])
-    writer.add_page(template_page)
-
-    output_filename = "PR_Output.pdf"
-    with open(output_filename, "wb") as f_out:
-        writer.write(f_out)
-
-    with open(output_filename, "rb") as f:
-        st.success("✅ PR berhasil dibuat sesuai template!")
-        st.download_button("⬇️ Download PR PDF", f, file_name=output_filename)
+    # --- convert Excel ke PDF jika ada LibreOffice ---
+    output_pdf = "PR_Output.pdf"
+    try:
+        subprocess.run(
+            ["libreoffice", "--headless", "--convert-to", "pdf", output_xlsx, "--outdir", "."],
+            check=True
+        )
+        with open(output_pdf, "rb") as f:
+            st.success("✅ PR berhasil dibuat dalam format PDF")
+            st.download_button("⬇️ Download PR PDF", f, file_name=output_pdf)
+    except Exception:
+        st.warning("📂 PR berhasil dibuat dalam format Excel. (PDF otomatis butuh LibreOffice/Excel).")
+        with open(output_xlsx, "rb") as f:
+            st.download_button("⬇️ Download PR Excel", f, file_name=output_xlsx)
